@@ -1,0 +1,36 @@
+main {
+    margin: auto;
+    max-width: 500px;
+    min-width: 200px;
+    padding: 10px 20px;
+}
+
+.nav {
+    display: flex;
+    flex-flow: nowrap;
+    align-items: center;
+    justify-content: start;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    border-bottom: 2px solid black;
+}
+
+.nav-item {
+    list-style-type: none;
+}
+
+.nav-item a {
+    color: grey;
+    font-weight: 900;
+    text-decoration: none;
+    display: block;
+}
+
+.nav-item.active a {
+    color: black;
+}
+
+.post {
+    border-bottom: 2px solid darkgrey;
+}
