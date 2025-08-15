@@ -20,21 +20,16 @@ char* generate_route_key(const char* method, const char* path) {
         return NULL;
     }
 
-    int written_bytes = sprintf(route_key, "%s:%s", method, path);
+    snprintf(route_key, route_key_size, "%s:%s", method, path);
     // printf("[][] %d vs %zu\n", written_bytes, route_key_size);
     return route_key;
 }
 
-int setup_routes(List* route_list) {
-    Route routes[] = {
-        {"/", "GET", home_route_handler},
-    };
-
-    size_t route_count = sizeof(routes) / sizeof(routes[0]);
+int setup_routes(List* route_list, Route routes[], size_t route_count) {
     size_t failed_routes = 0;
-
     for (size_t i = 0; i < route_count; i++) {
         char* route_key = generate_route_key(routes[i].method, routes[i].path);
+        printf("route -> %s\n", route_key);
         if (route_key == NULL) {
             failed_routes++;
             continue;
@@ -69,18 +64,73 @@ int router(List* route_list, HTTPRequest* req, int* client_fd, HashTable* file_t
     return 1;
 }
 
+int send_response(int* client_fd, HTTPResponseHeader* res_header, unsigned char* body, size_t body_size, const char* content_type) {
+    time_t raw_time;
+    time(&raw_time);
+    generate_http_date(&raw_time, res_header->date);
+
+    char content_length[32] = {'\0'};
+    snprintf(content_length, sizeof(content_length), "%zu", body_size);
+    list_set_item(res_header->header_fields, "Content-Length", content_length, strlen(content_length) + 1);
+
+    list_set_item(res_header->header_fields, "Content-Type", content_type, strlen(content_type) + 1);
+
+    HTTPResponse res = {*res_header, body};
+
+    StringBuffer response_string;
+    init_string_buffer(&response_string, 256 + body_size);
+
+    if (http_response_to_string(&res, &response_string) == -1) {
+        err("send_response", "Unable to convert response to string!");
+        free_string_buffer(&response_string);
+        // free_list(&header_fields);
+        return -1;
+    }
+
+    int send_status = send(*client_fd, response_string.data, response_string.size, 0);
+    if (send_status == -1) {
+        err("send_response", "Unable to respond to request!");
+        printf("\t%d,\n%s\n", send_status, response_string.data);
+    }
+
+    free_string_buffer(&response_string);
+    // free_list(&header_fields);
+    return send_status != -1 ? 1 : -1;
+}
+
+char* get_content_type(const char* extension) {
+    if (strcmp(extension, "html") == 0) {
+        return "text/html; charset=UTF-8";
+    } else if (strcmp(extension, "css") == 0) {
+        return "text/css";
+    } else {
+        return "application/octet-stream";
+    }
+}
+
 int undefined_route_handler(int* client_fd, HTTPRequest* req, HashTable* file_table) {
     char* requested_path = NULL;
     int requested_path_size = req_path_to_local(req->http_header.path, strlen(req->http_header.path), &requested_path);
 
-    if (requested_path_size < 1) {
+    if (requested_path_size < 1 || requested_path == NULL) {
+        free(requested_path);
         return -1;
     }
 
     int hash_value = hash(requested_path, requested_path_size, FILE_TABLE_SIZE);
     HashEntry* file_entry = file_table->entry[hash_value];
-    if (file_entry) {
-        File* file = (File*) file_entry->data;
+    File* file = file_entry ? (File*) file_entry->data : NULL;
+
+    if (file != NULL) {
+        unsigned char* body = NULL;
+        size_t read_bytes = read_file_content(file->path, &body);
+        if (body == NULL) {
+            err("undefined_route_handler", "Unable to read file content!");
+            free(requested_path);
+            free(body);
+            return -1;
+        }
+
         List header_fields = {0, NULL};
         HTTPResponseHeader res_header = {
             &header_fields, 
@@ -89,58 +139,82 @@ int undefined_route_handler(int* client_fd, HTTPRequest* req, HashTable* file_ta
             "OK", 
             ""
         };
-
-        time_t raw_time;
-        time(&raw_time);
-        generate_http_date(&raw_time, res_header.date);
-
-        unsigned char* body = NULL;
-        size_t read_bytes = read_file_content(file->path, &body);
-        char content_length[21] = {'\0'};
-        sprintf(content_length, "%zu", read_bytes);
-        list_set_item(&header_fields, "Content-Length", &content_length, strlen(content_length) + 1);
-
-        char* content_type;
-        if (strcmp(file->extension, "html") == 0) {
-            content_type = "text/html; charset=UTF-8"; 
-        } else if (strcmp(file->extension, "css") == 0) {
-            content_type = "text/css";
-        } else {
-            content_type = "application/octet-stream";
-        }
-        list_set_item(&header_fields, "Content-Type", content_type, strlen(content_type) + 1);
-
-        // char* response_string = NULL;
-        HTTPResponse res = {res_header, body};
-
-        StringBuffer response_string;
-        init_string_buffer(&response_string, 256);
-
-        if (http_response_to_string(&res, &response_string) == -1) {
-            err("undefined_route_handler", "Unable to convert response to string!");
-            free_string_buffer(&response_string);
-            free_list(&header_fields);
-            free(body);
+        char* content_type = get_content_type(file->extension);
+        int status = send_response(client_fd, &res_header, body, read_bytes, content_type);
+        free(body);
+        free(requested_path);
+        free_list(&header_fields);
+        return status;
+    } else if (strcmp(req->http_header.method, "GET") == 0 && requested_path[requested_path_size - 1] == '/') {
+        size_t index_path_size = (size_t)requested_path_size + strlen("index.html") + 1;
+        char* index_path = malloc(index_path_size * sizeof(char));
+        if (index_path == NULL) {
+            err("undefined_route_handler", "Unable to allocate memory for index path!");
+            free(requested_path);
             return -1;
         }
+        snprintf(index_path, index_path_size, "%sindex.html", requested_path);
+        int index_hash_value = hash(index_path, strlen(index_path), FILE_TABLE_SIZE);
+        HashEntry* index_entry = file_table->entry[index_hash_value];
+        file = index_entry ? (File*) index_entry->data : NULL;
+        if (file != NULL) {
+            unsigned char* body = NULL;
+            size_t read_bytes = read_file_content(file->path, &body);
+            if (body == NULL) {
+                err("undefined_route_handler", "Unable to read index file content!");
+                free(index_path);
+                free(requested_path);
+                free(body);
+                return -1;
+            }
 
-        int status = send(*client_fd, response_string.data, response_string.size, 0);
-        if (status == -1) {
-            err("undefined_route_handler", "Unable to respond to request!");
-            printf("\t%d,\n%s\n", status, response_string.data);
+            List header_fields = {0, NULL};
+            HTTPResponseHeader res_header = {
+                &header_fields, 
+                200, 
+                "HTTP/1.1", 
+                "OK", 
+                ""
+            };
+            char* content_type = get_content_type(file->extension);
+            int status = send_response(client_fd, &res_header, body, read_bytes, content_type);
+            free(body);
+            free(index_path);
+            free(requested_path);
+            free_list(&header_fields);
+            return status;
         }
-
-        free_string_buffer(&response_string);
-        free_list(&header_fields);
-        free(body);
-    } else {
-        not_found_route_handler(client_fd, req);
+        free(index_path);
     }
+
     free(requested_path);
+    not_found_route_handler(client_fd, req);
     return 1;
 }
 
+ssize_t load_page(unsigned char** body, const char* page_path) {
+    size_t file_path_size = strlen(DEFAULT_SERVER_PATH) + strlen(page_path) + 1;
+    char* file_path = malloc(file_path_size * sizeof(char));
+    if (file_path == NULL) {
+        err("home_route_handler", "Unable to allocate memory for file path!");
+        return -1;
+    }
+
+    snprintf(file_path, file_path_size, "%s%s", DEFAULT_SERVER_PATH, page_path);
+    size_t read_bytes = read_file_content(file_path, body);
+    free(file_path);
+    return read_bytes;
+}
+
 void home_route_handler(int* client_fd, HTTPRequest* req) {
+    unsigned char* body = NULL;
+    ssize_t read_bytes = load_page(&body, "/index.html");
+    if (body == NULL) {
+        err("home_route_handler", "Unable to read file content!");
+        free(body);
+        return;
+    }
+
     List header_fields = {0, NULL};
     HTTPResponseHeader res_header = {
         &header_fields, 
@@ -149,52 +223,44 @@ void home_route_handler(int* client_fd, HTTPRequest* req) {
         "OK", 
         ""
     };
-
-    time_t raw_time;
-    time(&raw_time);
-    generate_http_date(&raw_time, res_header.date);
-
-    unsigned char* body = NULL;
-    size_t file_path_size = strlen(DEFAULT_SERVER_PATH) + strlen("/index.html") + 1;
-    char* file_path = malloc(file_path_size * sizeof(char));
-    if (file_path == NULL) {
-        err("home_route_handler", "Unable to allocate memory for file path!");
-        return;
-    }
-
-    snprintf(file_path, file_path_size, "%s/index.html", DEFAULT_SERVER_PATH);
-    size_t read_bytes = read_file_content(file_path, &body);
-
-    char content_length[21] = {'\0'};
-    sprintf(content_length, "%zu", read_bytes);
-    list_set_item(&header_fields, "Content-Length", &content_length, strlen(content_length) + 1);
-
-    char* content_type =  "text/html; charset=UTF-8";
-    list_set_item(&header_fields, "Content-Type", content_type, strlen(content_type) + 1);
-
-    // char* response_string = NULL;
-    HTTPResponse res = {res_header, body};
-
-    StringBuffer response_string;
-    init_string_buffer(&response_string, 256);
-
-    if (http_response_to_string(&res, &response_string) == -1) {
-        err("home_route_handler", "Unable to convert response to string!");
-        return;
-    }
-
-    int status = send(*client_fd, response_string.data, response_string.size, 0);
-    if (status == -1) {
-        err("home_route_handler", "Unable to respond to request!");
-        printf("\t%d,\n%s\n", status, response_string.data);
-    }
-
-    free_string_buffer(&response_string);
+    char* content_type = "text/html; charset=UTF-8";
+    send_response(client_fd, &res_header, body, read_bytes, content_type);
+    free(body);
     free_list(&header_fields);
-    return;
+}
+
+void posts_route_handler(int* client_fd, HTTPRequest* req) {
+    unsigned char* body = NULL;
+    ssize_t read_bytes = load_page(&body, "/posts/index.html");
+    if (body == NULL) {
+        err("home_route_handler", "Unable to read file content!");
+        free(body);
+        return;
+    }
+
+    List header_fields = {0, NULL};
+    HTTPResponseHeader res_header = {
+        &header_fields, 
+        200, 
+        "HTTP/1.1", 
+        "OK", 
+        ""
+    };
+    char* content_type = "text/html; charset=UTF-8";
+    send_response(client_fd, &res_header, body, read_bytes, content_type);
+    free(body);
+    free_list(&header_fields);
 }
 
 void not_found_route_handler(int* client_fd, HTTPRequest* req) {
+    unsigned char* body = NULL;
+    ssize_t read_bytes = load_page(&body, "/404.html");
+    if (body == NULL) {
+        err("home_route_handler", "Unable to read file content!");
+        free(body);
+        return;
+    }
+
     List header_fields = {0, NULL};
     HTTPResponseHeader res_header = {
         &header_fields, 
@@ -203,40 +269,8 @@ void not_found_route_handler(int* client_fd, HTTPRequest* req) {
         "Not Found", 
         ""
     };
-
-    time_t raw_time;
-    time(&raw_time);
-    generate_http_date(&raw_time, res_header.date);
-
-    char* body = "<html>"
-        "<head><title>404 - Not Found</title></head>"
-        "<body><h1>Oopse! You're Lost!</h1><h2>Page Not Found</h2><hr /></body>"
-        "</html>";
-    // size_t content_length = strlen(body);
-    char content_length[21] = {0};
-    sprintf(content_length, "%zu", strlen(body));
-    printf("%s %zu --------\n", content_length, strlen(body));
-    list_set_item(&header_fields, "Content-Length", &content_length, sizeof(content_length));
-
-    char* content_type =  "text/html; charset=UTF-8";
-    list_set_item(&header_fields, "Content-Type", content_type, strlen(content_type));
-
-    // char* response_string = NULL;
-    HTTPResponse res = {res_header, body};
-    StringBuffer response_string;
-    init_string_buffer(&response_string, 256);
-
-    if (http_response_to_string(&res, &response_string) == -1) {
-        err("router", "Unable to convert response to string!");
-        return;
-    }
-
-    int status = send(*client_fd, response_string.data, response_string.size, 0);
-    if (status == -1) {
-        err("router", "Unable to respond to request!");
-        printf("\t%d,\n%s\n", status, response_string.data);
-    }
-
-    free_string_buffer(&response_string);
+    char* content_type = "text/html; charset=UTF-8";
+    send_response(client_fd, &res_header, body, read_bytes, content_type);
+    free(body);
     free_list(&header_fields);
 }

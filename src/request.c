@@ -302,7 +302,6 @@ int parse_header(HTTPRequest* req, const char* req_data) {
         return -1;
     }
 
-    printf("%zu\n", line_arr.size);
     // Parse first line
     result = parse_request_line(line_arr.lines[0], &req->http_header);
     if (result == -1) {
@@ -373,7 +372,7 @@ ssize_t http_response_to_string(HTTPResponse* res, StringBuffer* res_string) {
     // printf("2-1. [%s]\n", res_string->data);
 
     for (ListItem* field = res_header->header_fields->items; field != NULL; field = field->next) {
-        written_bytes += sprintf(line, "%s: %s\r\n", field->key, (char*) field->value);
+        written_bytes += snprintf(line, 1024, "%s: %s\r\n", field->key, (char*) field->value);
         // printf("3. [%s]\n", line);
         write_to_string_buffer(res_string, line, strlen(line));
         // printf("3-1. [%s]\n", res_string->data);
