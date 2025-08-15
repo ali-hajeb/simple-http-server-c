@@ -1,12 +1,14 @@
 #include "../include/socket.h"
 #include "../include/request.h"
 #include "../include/router.h"
-#include "../include/file_manager.h"
+#include "../include/polls.h"
 #include "../include/utils.h"
 
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/poll.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -88,63 +90,84 @@ int init_socket(struct addrinfo* res, char* host) {
     return socket_fd;
 }
 
-int start_server(int socket_fd, int queue_size, const char* host, const char* port) {
+int process_connections(PollFd* pfds, Server* server) {
+    if (pfds == NULL || server == NULL) {
+        return -1;
+    }
+
+    for (size_t i = 0; i < pfds->size; i++) {
+        if (pfds->items[i].revents & (POLLIN | POLLHUP)) {
+            printf("Event on fd %d: revents=%d\n", pfds->items[i].fd, pfds->items[i].revents);
+            if (pfds->items[i].fd == server->socket_fd) {
+                handle_new_connection(pfds, server->socket_fd);
+                printf("New connection on server socket\n");
+            } else {
+                printf("Client data on fd %d\n", pfds->items[i].fd);
+                char* request_buffer = malloc(MAX_REQ_BUFFER_SIZE);
+                if (request_buffer == NULL) {
+                    err("process_connections", "Unable to allocate memory for buffer!");
+                    // return -1;
+                    continue;
+                }
+
+                int client_fd = pfds->items[i].fd;
+                ssize_t received_bytes = handle_client_data(client_fd, request_buffer, MAX_REQ_BUFFER_SIZE);
+                if (received_bytes <= 0) {
+                    pfds_del(pfds, i);
+                    i--;
+                    printf("Client fd %d: read failed or closed (bytes=%zd)\n", client_fd, received_bytes);
+                    free(request_buffer);
+                    continue;
+                }
+
+                printf("Client fd %d: Received %zd bytes\n", client_fd, received_bytes);
+                HTTPRequest req;
+                req.body = NULL;
+
+                parse_header(&req, request_buffer);
+                // print_http_req(&req);
+
+                router(server->routes, &req, &client_fd, server->file_table);
+
+                pfds_del(pfds, i);
+                i--;
+                free_http_req(&req);
+                free(request_buffer);
+                printf("----------------\n");
+            }
+        }
+    }
+    return 1;
+}
+
+int start_server(Server* server, int queue_size) {
     int status = -1;
-    if ((status = listen(socket_fd, queue_size))) {
+    if ((status = listen(server->socket_fd, queue_size))) {
         err("start_server", "Unable to bind socket!");
         return -1;
     }
 
-    printf("LISTENING ON %s:%s...\n", host, port);
+    printf("LISTENING ON %s:%s...\n", server->host, server->port);
 
-    struct sockaddr_storage client;
-    socklen_t client_size = sizeof(client);
-    char* request_buffer = malloc(MAX_REQ_BUFFER_SIZE);
-
-
-    List routes = {0, NULL};
-    setup_routes(&routes);
-
-    HashTable file_table;
-    init_hash_table(&file_table, FILE_TABLE_SIZE);
-    load_files(DEFAULT_SERVER_PATH, &file_table);
-
-    // int i = 0;
-    // while (i < 2) {
-    while (1) { 
-        int client_fd;
-        if ((client_fd = accept(socket_fd, (struct sockaddr*) &client, &client_size)) == -1) {
-            err("start_server", "Unable to establish a connection with the client!");
-            continue;
-        }
-
-        ssize_t recieved_bytes = recv(client_fd, request_buffer, MAX_REQ_BUFFER_SIZE - 1, 0);
-        if (recieved_bytes == -1) {
-            // err("start_server", "Unable to recieve request data from client!");
-            printf("\t[CLIENT#%d] Unable to recieve request data from client!\n", client_fd);
-            continue;
-        } else if (recieved_bytes == 0) {
-            printf("\t[CLIENT#%d] DISCONNECTED!\n", client_fd);
-            continue;
-        }
-        request_buffer[recieved_bytes] = '\0';
-
-        printf("----------------\n");
-        HTTPRequest req;
-        req.body = NULL;
-
-        parse_header(&req, request_buffer);
-        print_http_req(&req);
-
-        router(&routes, &req, &client_fd, &file_table);
-
-        free_http_req(&req);
-        close(client_fd);
-        // i++;
+    PollFd pfds;
+    if (init_pfds(&pfds, 10) == -1) {
+        return -1;
     }
 
-    free_file_table(&file_table, FILE_TABLE_SIZE);
-    free_list(&routes);
-    free(request_buffer);
+    pfds_add(&pfds, server->socket_fd);
+
+    // int i = 0;
+    while (1) {
+        int poll_count = poll(pfds.items, pfds.size, -1);
+
+        if (poll_count == -1) {
+            err("start_server", "Poll Error!");
+            break;
+        }
+
+        process_connections(&pfds, server);
+        // if (i++ == 4) break;
+    }
+    free_pfds(&pfds);
     return 1;
 }
