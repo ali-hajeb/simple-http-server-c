@@ -23,7 +23,7 @@ typedef struct {
 
 typedef struct {
     HTTPRequestHeader http_header;
-    char* body;
+    unsigned char* body;
 } HTTPRequest;
 
 typedef struct {
@@ -36,7 +36,7 @@ typedef struct {
 
 typedef struct {
     HTTPResponseHeader http_header;
-    char* body;
+    unsigned char* body;
 } HTTPResponse;
 
 int init_lines(LineArray* lines, size_t initial_size);
