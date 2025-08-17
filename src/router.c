@@ -3,7 +3,6 @@
 #include "../include/file_manager.h"
 #include "../include/utils.h"
 
-#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
