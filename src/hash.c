@@ -6,6 +6,18 @@
 #include <string.h>
 #include <unistd.h>
 
+/*
+* Function: init_hash_table
+* 
+* -------------------------
+*
+*  Initiates a hash table struct.
+*
+*  hash_table: Pointer to the hash table.
+*  table_size: Size of the hash_table.
+*
+*  returns: If failed (-1), on success (1).
+*/
 int init_hash_table(HashTable* hash_table, size_t table_size) {
     if (hash_table == NULL) {
         return -1;
@@ -21,9 +33,24 @@ int init_hash_table(HashTable* hash_table, size_t table_size) {
         hash_table->entry[i] = NULL;
     }
 
+    hash_table->size = table_size;
+
     return 1;
 }
 
+/*
+ * Function: hash
+ *
+ * --------------
+ *
+ *  Generates a hash value of a hashable data.
+ *
+ *  hashable_data: String value to hash.
+ *  hashable_data_size: Size of hashable data.
+ *  max_table_size: Hash table size.
+ *
+ *  returns: Hash value.
+ */
 int hash(const char* hashable_data, size_t hashable_data_size, size_t max_table_size) {
     // FNV-1a offset basis
     unsigned int hash_value = 2166136261u;
@@ -33,6 +60,17 @@ int hash(const char* hashable_data, size_t hashable_data_size, size_t max_table_
     return hash_value % max_table_size;
 }
 
+/*
+ * Function create_entry
+ * 
+ * ---------------------
+ *
+ *  Creates a new entry.
+ *
+ *  data: Pointer to the data.
+ *
+ *  returns: Pointer to the new entry.
+ */
 HashEntry* create_entry(void* data) {
     if (data == NULL) {
         return NULL;
@@ -50,6 +88,18 @@ HashEntry* create_entry(void* data) {
     return new_entry;
 }
 
+/*
+ * Function: add_hash_entry
+ *
+ * ------------------------
+ *
+ *  Creates a new entry and adds the entry to the hash table.
+ *
+ *  hash_entry: Pointer to the entry pointer.
+ *  data: Pointer to the data.
+ *
+ *  returns: Pointer to the entry.
+ */
 HashEntry* add_hash_entry(HashEntry** hash_entry, void* data) {
     if (data == NULL) {
         return NULL;
@@ -62,9 +112,18 @@ HashEntry* add_hash_entry(HashEntry** hash_entry, void* data) {
     return new_entry;
 }
 
-void free_hash_table(HashTable* hash_table, size_t hash_table_size) {
+/*
+ * Function: free_hash_table
+ *
+ * -------------------------
+ *
+ *  Frees the hash table.
+ *
+ *  hash_table: Pointer to the hash table.
+ */
+void free_hash_table(HashTable* hash_table) {
     HashEntry* next;
-    for (size_t i = 0; i < hash_table_size; i++) {
+    for (size_t i = 0; i < hash_table->size; i++) {
         for (HashEntry* j = hash_table->entry[i]; j != NULL; j = next) {
             next = j->next;
             free(j->data);

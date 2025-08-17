@@ -1,13 +1,23 @@
 #include "../include/file_manager.h"
 #include "../include/utils.h"
 
-#include <stddef.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <dirent.h>
 #include <string.h>
 
+/*
+* Function: load_files
+*
+* --------------------
+*
+*  Recursivly traverses through directories and adds files to the file table.
+*
+*  base_path: Starting directory.
+*  file_table: Pointer to the files hash table.
+*
+*  returns: Number of loaded files. If failed, returns (-1).
+*/
 int load_files(char* base_path, HashTable* file_table) {
     int file_count = 0;
     char path[1024];
@@ -74,7 +84,18 @@ int load_files(char* base_path, HashTable* file_table) {
     return file_count;
 }
 
-
+/*
+* Function: get_file
+*
+* ------------------
+*
+*  Returns a pointer to the File structure in the files hash table.
+*
+*  path: File path.
+*  file_table: Pointer to the files hash table.
+*
+*  returns: Pointer to the file.
+*/
 File* get_file(const char* path, HashTable* file_table) {
     int hash_value = hash(path, strlen(path), FILE_TABLE_SIZE);
     for (HashEntry* file_entry = file_table->entry[hash_value]; file_entry != NULL; file_entry = file_entry->next) {
@@ -85,6 +106,18 @@ File* get_file(const char* path, HashTable* file_table) {
     return NULL;
 }
 
+/*
+* Function: read_file_content
+*
+* --------------------------
+*
+*  Reads the file content into the buffer.
+*
+*  path: File path.
+*  buffer: Pointer to the buffer.
+*
+*  returns: Number of read bytes. If failed, returns (-1).
+*/
 ssize_t read_file_content(const char* path, unsigned char** buffer) {
     if (path == NULL) {
         return -1;
@@ -109,6 +142,19 @@ ssize_t read_file_content(const char* path, unsigned char** buffer) {
     return read_bytes;
 }
 
+/*
+* Function: req_path_to_local 
+*
+* -----------------
+*
+*  Converts requested path to local path.
+*
+*  req_path: Requested path.
+*  req_path_size: Requested path string size.
+*  local_path: Pointer to the local path string.
+*
+*  returns: Local path string size. If failed, returns (-1).
+*/
 int req_path_to_local(const char* req_path, size_t req_path_size, char** local_path) {
     if (req_path == NULL) {
         return -1;
@@ -125,10 +171,19 @@ int req_path_to_local(const char* req_path, size_t req_path_size, char** local_p
     return written_bytes;
 }
 
-
-void free_file_table(HashTable* file_table, size_t file_table_size) {
+/*
+ * Function: free_file_table
+ *
+ * -------------------------
+ *
+ *  Frees files hash table.
+ *
+ *  file_table: Pointer to the files hash table.
+ *  file_table_size: Size of the table.
+ */
+void free_file_table(HashTable* file_table) {
     HashEntry* next;
-    for (size_t i = 0; i < file_table_size; i++) {
+    for (size_t i = 0; i < file_table->size; i++) {
         for (HashEntry* j = file_table->entry[i]; j != NULL; j = next) {
             next = j->next;
             File* file = (File*) j->data;
@@ -141,4 +196,5 @@ void free_file_table(HashTable* file_table, size_t file_table_size) {
         }
     }
     free(file_table->entry);
+    file_table->size = 0;
 }

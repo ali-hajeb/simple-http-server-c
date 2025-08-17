@@ -53,7 +53,7 @@ int main(int argc, char** argv) {
     result = load_files(DEFAULT_SERVER_PATH, &file_table);
     if (result == -1) {
         close(server.socket_fd);
-        free_file_table(&file_table, FILE_TABLE_SIZE);
+        free_file_table(&file_table);
         free_list(&routes);
         exit(1);
     }
@@ -61,13 +61,13 @@ int main(int argc, char** argv) {
 
     if ((result = start_server(&server, 128)) == -1) {
         close(server.socket_fd);
-        free_file_table(&file_table, FILE_TABLE_SIZE);
+        free_file_table(&file_table);
         free_list(&routes);
         exit(1);
     }
 
     close(server.socket_fd);
-    free_file_table(&file_table, FILE_TABLE_SIZE);
+    free_file_table(&file_table);
     free_list(&routes);
     return 0;
 }
