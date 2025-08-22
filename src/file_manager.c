@@ -1,7 +1,9 @@
 #include "../include/file_manager.h"
 #include "../include/utils.h"
 
+#include <stddef.h>
 #include <stdlib.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <dirent.h>
 #include <string.h>
@@ -18,9 +20,14 @@
 *
 *  returns: Number of loaded files. If failed, returns (-1).
 */
-int load_files(char* base_path, HashTable* file_table) {
+int load_files(char* base_path, FileTable* file_table) {
     int file_count = 0;
-    char path[1024];
+    size_t path_size = 256 * sizeof(char);
+    char* path = malloc(path_size);
+    if (path == NULL) {
+        err("load_files", "Unable to allocate memory for path!");
+        return -1;
+    }
     struct dirent* dp;
     DIR* dir = opendir(base_path);
     if(dir == NULL) {
@@ -33,6 +40,15 @@ int load_files(char* base_path, HashTable* file_table) {
         }
 
         // update base path
+        size_t new_path_size = strlen(path) + strlen(base_path) + strlen(dp->d_name) + 2;
+        if (new_path_size > path_size) {
+            size_t upadated_path_size = path_size * 2 + new_path_size;
+            path = realloc(path, upadated_path_size);
+            if (path == NULL) {
+                err("load_files", "Unable to re-allocate memory for path!");
+                return -1;
+            }
+        }
         strcpy(path, base_path);
         strcat(path, "/");
         strcat(path, dp->d_name);
@@ -54,6 +70,7 @@ int load_files(char* base_path, HashTable* file_table) {
                 if (result == -1) {
                     err("load_files", "Unable to extract file name and extension!");
                     free(new_file->name);
+                    free(new_file->path);
                     free(new_file->extension);
                     free(new_file->fullname);
                     free(new_file);
@@ -66,10 +83,11 @@ int load_files(char* base_path, HashTable* file_table) {
                 // strcpy(new_file->path, base_path);
 
                 int hash_value = hash(path, strlen(path), FILE_TABLE_SIZE);
-                HashEntry* file_entry = add_hash_entry(&file_table->entry[hash_value], new_file);
+                FileEntry* file_entry = add_hash_entry(&file_table->entry[hash_value], new_file);
                 if (file_entry == NULL) {
                     err("load_files", "Unable to add file to the file table!");
                     free(new_file->name);
+                    free(new_file->path);
                     free(new_file->extension);
                     free(new_file->fullname);
                     free(new_file);
@@ -96,9 +114,12 @@ int load_files(char* base_path, HashTable* file_table) {
 *
 *  returns: Pointer to the file.
 */
-File* get_file(const char* path, HashTable* file_table) {
+File* get_file(const char* path, FileTable* file_table) {
+    if (file_table == NULL || path == NULL) {
+        return NULL;
+    }
     int hash_value = hash(path, strlen(path), FILE_TABLE_SIZE);
-    for (HashEntry* file_entry = file_table->entry[hash_value]; file_entry != NULL; file_entry = file_entry->next) {
+    for (FileEntry* file_entry = file_table->entry[hash_value]; file_entry != NULL; file_entry = file_entry->next) {
         if (strcmp(((File*) file_entry->data)->path, path) == 0) {
             return (File*) file_entry->data;
         }
@@ -181,10 +202,10 @@ int req_path_to_local(const char* req_path, size_t req_path_size, char** local_p
  *  file_table: Pointer to the files hash table.
  *  file_table_size: Size of the table.
  */
-void free_file_table(HashTable* file_table) {
-    HashEntry* next;
+void free_file_table(FileTable* file_table) {
+    FileEntry* next;
     for (size_t i = 0; i < file_table->size; i++) {
-        for (HashEntry* j = file_table->entry[i]; j != NULL; j = next) {
+        for (FileEntry* j = file_table->entry[i]; j != NULL; j = next) {
             next = j->next;
             File* file = (File*) j->data;
             free(file->name);
@@ -197,4 +218,42 @@ void free_file_table(HashTable* file_table) {
     }
     free(file_table->entry);
     file_table->size = 0;
+}
+
+/*
+* Function: stream_file_content
+*
+* -----------------------------
+*  
+*  Sends file to client in chunks.
+*
+*  client_fd: client file discriptor.
+*  path: file path.
+*
+*  returns: Number of sent bytes.
+*/
+ssize_t stream_file_content(int client_fd, const char* path) {
+    FILE* file = fopen(path, "rb");
+    if (!file) {
+        err("stream_file_content", "Unable to open file!");
+        return -1;
+    }
+    unsigned char* buffer = malloc(4096 * sizeof(unsigned char));
+    if (buffer == NULL) {
+        err("stream_file_content", "Unable to allocate memory for file buffer!");
+        return -1;
+    }
+    size_t read_bytes;
+    ssize_t total_sent = 0;
+    while ((read_bytes = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+        ssize_t sent = send(client_fd, buffer, read_bytes, 0);
+        if (sent == -1) {
+            err("stream_file_content", "Unable to send data!");
+            fclose(file);
+            return -1;
+        }
+        total_sent += sent;
+    }
+    fclose(file);
+    return total_sent;
 }

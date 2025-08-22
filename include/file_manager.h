@@ -15,14 +15,9 @@ typedef struct {
     int access_level;
 } File;
 
-typedef struct file_entry {
-    File* file;
-    struct file_entry* next;
-} FileEntry;
+typedef HashEntry FileEntry;
 
-typedef struct {
-    FileEntry* entery;
-} FileTable;
+typedef HashTable FileTable;
 
 
 /*
@@ -37,7 +32,7 @@ typedef struct {
 *
 *  returns: Number of loaded files. If failed, returns (-1).
 */
-int load_files(char* base_path, HashTable* file_table);
+int load_files(char* base_path, FileTable* file_table);
 
 /*
 * Function: get_file
@@ -51,7 +46,7 @@ int load_files(char* base_path, HashTable* file_table);
 *
 *  returns: Pointer to the file.
 */
-File* get_file(const char* path, HashTable* file_table);
+File* get_file(const char* path, FileTable* file_table);
 
 /*
 * Function: read_file_content
@@ -92,5 +87,19 @@ int req_path_to_local(const char* req_path, size_t req_path_size, char** local_p
  *  file_table: Pointer to the files hash table.
  *  file_table_size: Size of the table.
  */
-void free_file_table(HashTable* file_table);
+void free_file_table(FileTable* file_table);
+
+/*
+* Function: stream_file_content
+*
+* -----------------------------
+*  
+*  Sends file to client in chunks.
+*
+*  client_fd: client file discriptor.
+*  path: file path.
+*
+*  returns: Number of sent bytes.
+*/
+ssize_t stream_file_content(int client_fd, const char* path);
 #endif

@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
     }
     server.routes = &routes;
 
-    HashTable file_table;
+    FileTable file_table;
     result = init_hash_table(&file_table, FILE_TABLE_SIZE);
     if (result == -1) {
         close(server.socket_fd);
