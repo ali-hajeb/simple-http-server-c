@@ -98,13 +98,12 @@ int send_response(int* client_fd, HTTPResponseHeader* res_header, unsigned char*
 }
 
 char* get_content_type(const char* extension) {
-    if (strcmp(extension, "html") == 0) {
-        return "text/html; charset=UTF-8";
-    } else if (strcmp(extension, "css") == 0) {
-        return "text/css";
-    } else {
-        return "application/octet-stream";
-    }
+    if (extension == NULL) return "application/octet-stream";
+    if (strcmp(extension, "html") == 0) return "text/html; charset=UTF-8";
+    if (strcmp(extension, "css") == 0) return "text/css";
+    if (strcmp(extension, "js") == 0) return "application/javascript";
+    if (strcmp(extension, "jpg") == 0 || strcmp(extension, "jpeg") == 0) return "image/jpeg";
+    return "application/octet-stream";
 }
 
 int undefined_route_handler(int* client_fd, HTTPRequest* req, HashTable* file_table) {
@@ -203,6 +202,27 @@ ssize_t load_page(unsigned char** body, const char* page_path) {
     size_t read_bytes = read_file_content(file_path, body);
     free(file_path);
     return read_bytes;
+}
+
+void generic_route_handler(int* client_fd, HTTPRequest* req, const char* page_path, int status_code, const char* status_desc) {
+    unsigned char* body = NULL;
+    ssize_t read_bytes = load_page(&body, page_path);
+    if (body == NULL) {
+        err("generic_route_handler", "Unable to read file content!");
+        return;
+    }
+    List header_fields = {0, NULL};
+    HTTPResponseHeader res_header = {
+        &header_fields,
+        status_code,
+        "HTTP/1.1",
+        *status_desc,
+        ' '
+    };
+    const char* content_type = "text/html; charset=UTF-8";
+    send_response(client_fd, &res_header, body, read_bytes, content_type);
+    free(body);
+    free_list(&header_fields);
 }
 
 void home_route_handler(int* client_fd, HTTPRequest* req) {

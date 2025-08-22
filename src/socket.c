@@ -4,7 +4,6 @@
 #include "../include/polls.h"
 #include "../include/utils.h"
 
-#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -107,6 +106,8 @@ int process_connections(PollFd* pfds, Server* server) {
                 if (request_buffer == NULL) {
                     err("process_connections", "Unable to allocate memory for buffer!");
                     // return -1;
+                    pfds_del(pfds, i);
+                    i--;
                     continue;
                 }
 

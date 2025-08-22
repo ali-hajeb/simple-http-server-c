@@ -14,18 +14,18 @@
 *  buffer: Pointer to the StringBuffer struct.
 *  initial_size: Initial capacity of the buffer.
 *
-*  returns: If failed (0).
+*  returns: If failed (-1).
 */
 int init_string_buffer(StringBuffer* buffer, size_t initial_size) {
     if (buffer == NULL || initial_size == 0) {
         fprintf(stderr, "\n[ERROR]: init_buffer_from_file() {} -> Required parameters are NULL!\n");
-        return 0;
+        return -1;
     }
 
     buffer->data = malloc(sizeof(char) * initial_size);
     if (buffer->data == NULL) {
         fprintf(stderr, "\n[ERROR]: init_buffer_from_file() {} -> Unable to allocate memory for buffer!\n");
-        return 0;
+        return -1;
     }
 
     memset(buffer->data, 0, initial_size);
@@ -85,4 +85,7 @@ void free_string_buffer(StringBuffer* buffer) {
     if (buffer->data != NULL) {
         free(buffer->data);
     }
+    buffer->data = NULL;
+    buffer->max_size = 0;
+    buffer->size = 0;
 }

@@ -5,14 +5,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-void init_list(List* list) {
-    if (list == NULL) {
-        return;
-    }
-    list->size = 0;
-    list->items = NULL;
-}
-
+/*
+ * Function: create_item
+ *
+ * ---------------------
+ *
+ *  Creates a list item.
+ *
+ *  returns: Pointer to the item.
+ */
 ListItem* create_item(const char* key, const void* value, size_t value_size) {
     if (key == NULL || value == NULL || value_size == 0) {
         err("dict_create", "Null key or value!");
@@ -46,6 +47,20 @@ ListItem* create_item(const char* key, const void* value, size_t value_size) {
     return item;
 }
 
+/*
+ * Function: list_set_item
+ *
+ * -----------------------
+ *
+ *  Adds an item to the list. If item key exists, updates the value.
+ *
+ *  list: pointer to the linked list.
+ *  key: item key.
+ *  value: pointer to the item value.
+ *  value_size: item value size.
+ *
+ *  returns: If failed (-1), on update (0), on add (1).
+ */
 int list_set_item(List* list, const char* key, const void* value, size_t value_size) {
     if (list == NULL || key == NULL || value == NULL) {
         err("list_set_item", "Null params!");
@@ -81,6 +96,18 @@ int list_set_item(List* list, const char* key, const void* value, size_t value_s
     return 1;
 }
 
+/*
+ * Function: list_get_item
+ *
+ * -----------------------
+ *
+ *  Returns a pointer to the desired item.
+ *
+ *  list: pointer to linked list struct.
+ *  key: item key.
+ *
+ *  returns: pointer to the desired item. returns NULL, if item not found.
+ */
 ListItem* list_get_item(List* list, const char* key) {
     if (list == NULL || key == NULL) {
         return NULL;
@@ -93,6 +120,17 @@ ListItem* list_get_item(List* list, const char* key) {
     return NULL;
 }
 
+/*
+ * Function: free_list
+ *
+ * -------------------
+ *
+ *  Frees linked list.
+ *
+ *  list: pointer to the linked list.
+ *
+ *  returns: Number of freed items.
+ */
 size_t free_list(List* list) {
     size_t items_freed = 0;
     ListItem* next;
