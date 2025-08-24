@@ -3,10 +3,10 @@
 #include "linked_list.h"
 #include "polls.h"
 #include "hash.h"
+#include "request.h"
 
 #include <netdb.h>
 #include <netinet/in.h>
-#include <stddef.h>
 
 #define KB (1 << 10) //1024
 #define MAX_REQ_BUFFER_SIZE (sizeof(char) * 4 * KB)
@@ -28,4 +28,31 @@ int init_socket(struct addrinfo* res, char* host);
 int start_server(Server* server, int queue_size);
 int process_connections(PollFd* pfds, Server* server);
 
+/*
+ * Function: handle_new_connection
+ *
+ * -------------------------------
+ *
+ *  Handles new coming connection and adds it to the list.
+ *
+ *  pfds: pointer to the poll list.
+ *  listener_fd: listener socket file descriptor.
+ *
+ *  returns: if failed (-1), on success (1).
+ */
+int handle_new_connection(PollFd* pfds, int listener_fd);
+
+/*
+ * Function: handle_client_data
+ *
+ * ----------------------------
+ *
+ *  receives client's request data.
+ *
+ *  client_fd: client's file descriptor.
+ *  req: pointer to a empty initiated http request.
+ *
+ *  returns: received bytes. if failed (-1).
+ */
+ssize_t handle_client_data(int client_fd, HTTPRequest* req);
 #endif
