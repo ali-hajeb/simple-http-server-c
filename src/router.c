@@ -4,11 +4,11 @@
 #include "../include/utils.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <time.h>
+#include <stdlib.h>
 #include <unistd.h>
+#include <time.h>
+#include <sys/socket.h>
 
 char* generate_route_key(const char* method, const char* path) {
     size_t route_key_size = strlen(path) + strlen(method) + 2;
@@ -66,7 +66,10 @@ int router(List* route_list, HTTPRequest* req, int* client_fd, HashTable* file_t
 int send_response(int* client_fd, HTTPResponseHeader* res_header, unsigned char* body, size_t body_size, const char* content_type) {
     time_t raw_time;
     time(&raw_time);
-    generate_http_date(&raw_time, res_header->date);
+    ssize_t result = generate_http_date(&raw_time, res_header->date);
+    if (result == 0) {
+        return -1;
+    }
 
     char content_length[32] = {'\0'};
     snprintf(content_length, sizeof(content_length), "%zu", body_size);
@@ -131,11 +134,11 @@ int undefined_route_handler(int* client_fd, HTTPRequest* req, HashTable* file_ta
 
         List header_fields = {0, NULL};
         HTTPResponseHeader res_header = {
+            {0},
+            "OK", 
+            "HTTP/1.1", 
             &header_fields, 
             200, 
-            "HTTP/1.1", 
-            "OK", 
-            ""
         };
         char* content_type = get_content_type(file->extension);
         int status = send_response(client_fd, &res_header, body, read_bytes, content_type);
@@ -168,11 +171,11 @@ int undefined_route_handler(int* client_fd, HTTPRequest* req, HashTable* file_ta
 
             List header_fields = {0, NULL};
             HTTPResponseHeader res_header = {
+                {0},
+                "OK", 
+                "HTTP/1.1", 
                 &header_fields, 
                 200, 
-                "HTTP/1.1", 
-                "OK", 
-                ""
             };
             char* content_type = get_content_type(file->extension);
             int status = send_response(client_fd, &res_header, body, read_bytes, content_type);
@@ -213,12 +216,13 @@ void generic_route_handler(int* client_fd, HTTPRequest* req, const char* page_pa
     }
     List header_fields = {0, NULL};
     HTTPResponseHeader res_header = {
-        &header_fields,
-        status_code,
-        "HTTP/1.1",
-        *status_desc,
-        ' '
+        .date = {0},
+        .desc = *status_desc,
+        .http_version = "HTTP/1.1",
+        .header_fields = &header_fields,
+        .code = status_code,
     };
+
     const char* content_type = "text/html; charset=UTF-8";
     send_response(client_fd, &res_header, body, read_bytes, content_type);
     free(body);
@@ -236,11 +240,11 @@ void home_route_handler(int* client_fd, HTTPRequest* req) {
 
     List header_fields = {0, NULL};
     HTTPResponseHeader res_header = {
+        {0},
+        "OK", 
+        "HTTP/1.1", 
         &header_fields, 
         200, 
-        "HTTP/1.1", 
-        "OK", 
-        ""
     };
     char* content_type = "text/html; charset=UTF-8";
     send_response(client_fd, &res_header, body, read_bytes, content_type);
@@ -259,11 +263,11 @@ void posts_route_handler(int* client_fd, HTTPRequest* req) {
 
     List header_fields = {0, NULL};
     HTTPResponseHeader res_header = {
+        {0},
+        "OK", 
+        "HTTP/1.1", 
         &header_fields, 
         200, 
-        "HTTP/1.1", 
-        "OK", 
-        ""
     };
     char* content_type = "text/html; charset=UTF-8";
     send_response(client_fd, &res_header, body, read_bytes, content_type);
@@ -282,11 +286,11 @@ void not_found_route_handler(int* client_fd, HTTPRequest* req) {
 
     List header_fields = {0, NULL};
     HTTPResponseHeader res_header = {
-        &header_fields, 
-        404, 
-        "HTTP/1.1", 
-        "Not Found", 
-        ""
+        {0},
+        "Not Found",
+        "HTTP/1.1",
+        &header_fields,
+        404
     };
     char* content_type = "text/html; charset=UTF-8";
     send_response(client_fd, &res_header, body, read_bytes, content_type);
