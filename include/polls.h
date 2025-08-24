@@ -1,5 +1,6 @@
 #ifndef POLLS_H
 #define POLLS_H
+#include "buffer.h"
 
 #include <stdio.h>
 #include <poll.h>
@@ -53,34 +54,6 @@ int pfds_add(PollFd* pfds, int new_fd);
  */
 int pfds_del(PollFd* pfds, int index);
 
-/*
- * Function: handle_new_connection
- *
- * -------------------------------
- *
- *  Handles new coming connection and adds it to the list.
- *
- *  pfds: pointer to the poll list.
- *  listener_fd: listener socket file descriptor.
- *
- *  returns: if failed (-1), on success (1).
- */
-int handle_new_connection(PollFd* pfds, int listener_fd);
-
-/*
- * Function: handle_client_data
- *
- * ----------------------------
- *
- *  Recieves client's request data.
- *
- *  client_fd: client's file descriptor.
- *  request_buffer: pointer to the request data buffer.
- *  buffer_size: pointer to the buffer size.
- *
- *  returns: recieved bytes. if failed (-1).
- */
-ssize_t handle_client_data(int client_fd, char* request_buffer, size_t request_buffer_size);
 
 /*
  * Function: free_pfds
