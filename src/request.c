@@ -6,6 +6,18 @@
 #include <string.h>
 #include <unistd.h>
 
+/*
+ * Function: init_lines
+ *
+ * --------------------
+ *
+ *  Initiates line list.
+ *
+ *  line_arr: pointer to the line list.
+ *  initial_size: initial list size.
+ *
+ *  returns: if failed (-1), on success (1).
+ */
 int init_lines(LineArray* line_arr, size_t initial_size) {
     if (line_arr == NULL) {
         return -1;
@@ -23,10 +35,23 @@ int init_lines(LineArray* line_arr, size_t initial_size) {
 
     line_arr->max_size = initial_size;
     line_arr->size = 0;
-    return 0;
+    return 1;
 }
 
-size_t insert_line(LineArray* line_arr, const char* data, size_t size) {
+/*
+ * Function: insert_line
+ *
+ * ---------------------
+ *
+ *  Adds line to the list.
+ *
+ *  line_arr: pointer to the list.
+ *  data: line data.
+ *  size: line lenght.
+ *
+ *  returns: length of the inserted line.
+ */
+ssize_t insert_line(LineArray* line_arr, const char* data, size_t size) {
     if (line_arr == NULL || line_arr->lines == NULL) {
         return -1;
     }
@@ -38,7 +63,7 @@ size_t insert_line(LineArray* line_arr, const char* data, size_t size) {
         // printf("new_size = %zu; 2 * %zu -> %zu : %p->%p\n", new_size, line_arr->max_size, new_size * sizeof(char*), line_arr->lines, *(line_arr->lines));
         line_arr->lines = realloc(line_arr->lines, new_size * sizeof(char*));
         if (line_arr->lines == NULL) {
-            err("init_lines", "Unable to allocate memory for lines!");
+            err("insert_line", "Unable to allocate memory for lines!");
             return -1;
         }
         line_arr->max_size = new_size;
@@ -52,7 +77,7 @@ size_t insert_line(LineArray* line_arr, const char* data, size_t size) {
     // insert new line
     line_arr->lines[line_arr->size] = malloc(size + 1);
     if (line_arr->lines[line_arr->size] == NULL) {
-        err("init_lines", "Unable to allocate memory for the new line!");
+        err("insert_line", "Unable to allocate memory for the new line!");
         return -1;
     }
     strncpy(line_arr->lines[line_arr->size], data, size);
@@ -60,7 +85,16 @@ size_t insert_line(LineArray* line_arr, const char* data, size_t size) {
     return strlen(line_arr->lines[line_arr->size - 1]);
 }
 
-void free_lines(LineArray *line_arr) {
+/*
+ * Function: free_lines
+ *
+ * --------------------
+ *
+ *  Frees line list.
+ *
+ *  line_arr: pointer to the line list.
+ */
+void free_lines(LineArray* line_arr) {
     if (line_arr == NULL || line_arr->lines == NULL) {
         return;
     }
@@ -77,6 +111,15 @@ void free_lines(LineArray *line_arr) {
     line_arr->max_size = 0;
 }
 
+/*
+ * Function: print_http_req
+ *
+ * ------------------------
+ *
+ *  Prints HTTP request data.
+ *
+ *  req: pointer to the http request.
+ */
 void print_http_req(HTTPRequest* req) {
     HTTPRequestHeader* req_header = &req->http_header;
     printf("Method: [%s]\n", req_header->method);
@@ -88,9 +131,21 @@ void print_http_req(HTTPRequest* req) {
     }
 }
 
+/*
+ * Function: http_req_to_LineArray
+ *
+ * -------------------------------
+ *
+ *  Converts raw http requests to lines.
+ *
+ *  req_raw: raw http request.
+ *  line_arr: pointer to the line list.
+ *
+ *  returns: number of lines.
+ */
 size_t http_req_to_LineArray(const char* req_raw, LineArray* line_arr) {
     short line_condition = 0; // if = 2, line has ended with '\r\n'
-    size_t line_size = 0;
+    ssize_t line_size = 0;
     const char* line_start = req_raw;
 
     for (const char* i_ptr = req_raw; i_ptr != NULL && *i_ptr != '\0'; i_ptr++) {
@@ -115,17 +170,6 @@ size_t http_req_to_LineArray(const char* req_raw, LineArray* line_arr) {
                 line_start = i_ptr + 1;
                 continue;
             }
-            // const char* line_beg = i_ptr - line_size - 1;
-            // printf("line size: %zu\n", line_size);
-            // int result = insert_line(line_arr, line_beg, line_size);
-            // if (result == -1) {
-            //     err("http_req_to_LineArray", "Unable to insert the new line!");
-            //     printf("\tline: %zu\n", line_arr->size + 1);
-            //     continue;
-            // }
-            // line_condition = 0;
-            // line_size = 0;
-            // continue;
         }
         line_size++;
     }
@@ -133,6 +177,18 @@ size_t http_req_to_LineArray(const char* req_raw, LineArray* line_arr) {
     return line_arr->size;
 }
 
+/*
+ * Function: parse_request_line
+ *
+ * ----------------------------
+ *
+ *  Parses the first line of the HTTP request.
+ *
+ *  req_line: pointer to the string data of the first line.
+ *  req_header: pointer to the HTTPRequestHeader struct.
+ *
+ *  returns: if failed (-1), on success (1).
+ */
 int parse_request_line(const char* req_line, HTTPRequestHeader* req_header) {
     // printf("line: %s\n", req_line);
     size_t keyword_size = 0;
@@ -191,6 +247,18 @@ int parse_request_line(const char* req_line, HTTPRequestHeader* req_header) {
     return 1;
 }
 
+/*
+ * Function: parse_header_fields
+ *
+ * -----------------------------
+ *
+ *  Parse's HTTP Request headers to a list of key-values.
+ *
+ *  line_arr: pointer to the line list.
+ *  header_fields: pointer to the header fields list.
+ *
+ *  returns: number of header fields. if failed (-1).
+ */
 int parse_header_fields(const LineArray* line_arr, List* header_fields) {
     for (size_t i = 1; i < line_arr->size; i++) {
         // printf("[%s]\n", line_arr->lines[i]);
@@ -287,6 +355,18 @@ int parse_header_fields(const LineArray* line_arr, List* header_fields) {
     return header_fields->size;
 }
 
+/*
+ * Function: parse_header
+ *
+ * ----------------------
+ *
+ *  Parses raw http request headers.
+ *
+ *  req: pointer to the HTTPRequest struct.
+ *  req_data: pointer to the raw request data.
+ *
+ *  returns: if failed (-1), on success (1). 
+ */
 int parse_header(HTTPRequest* req, const char* req_data) {
     LineArray line_arr;
     int result = init_lines(&line_arr, 4);
@@ -332,6 +412,15 @@ int parse_header(HTTPRequest* req, const char* req_data) {
     return 1;
 }
 
+/*
+ * Function: free_http_req
+ *
+ * -----------------------
+ *
+ *  Frees HTTP Request struct.
+ *
+ *  req: pointer to the http request struct.
+ */
 void free_http_req(HTTPRequest* req) {
     if (req->body != NULL) {
         free(req->body);
@@ -347,6 +436,18 @@ void free_http_req(HTTPRequest* req) {
     }
 }
 
+/*
+ * Function: http_response_to_string
+ *
+ * ---------------------------------
+ *
+ *  Stringifies the HTTP Response struct.
+ *
+ *  res: pointer to the http response struct.
+ *  res_string: pointer to the string buffer.
+ *
+ *  returns: size of response string. if failed (-1).
+ */
 ssize_t http_response_to_string(HTTPResponse* res, StringBuffer* res_string) {
     if (res == NULL) {
         return -1;
@@ -354,33 +455,62 @@ ssize_t http_response_to_string(HTTPResponse* res, StringBuffer* res_string) {
 
     HTTPResponseHeader* res_header = &res->http_header;
 
-    char* line = malloc(1024 * sizeof(char));
+    // Temperory buffer for lines.
+    size_t max_line_size = 1024 * sizeof(char);
+    char* line = malloc(max_line_size);
     if (line == NULL) {
         err("http_response_to_string", "Unable to allocate memory for line buffer!");
         return -1;
     }
 
-
-    int written_bytes = sprintf(line, "%s %d %s\r\n", res_header->http_version, res_header->code, res_header->desc);
+    // write response line
+    int written_bytes = snprintf(line, max_line_size, "%s %d %s\r\n", 
+                                 res_header->http_version, res_header->code, res_header->desc);
     // printf("1. [%s]\n", line);
-    write_to_string_buffer(res_string, line, strlen(line));
+    ssize_t result = write_to_string_buffer(res_string, line, strlen(line));
+    if (result == -1) {
+        err("http_response_to_string", "Unable to write to the string buffer!");
+        printf("\tline: %s\n", line);
+        free(line);
+        return -1;
+    }
     // printf("1-1. [%s]\n", res_string->data);
 
-    written_bytes += sprintf(line, "%s\r\n", res_header->date);
+    // write response date
+    written_bytes += snprintf(line, max_line_size,"%s\r\n", res_header->date);
     // printf("2. [%s]\n", line);
-    write_to_string_buffer(res_string, line, strlen(line));
+    result = write_to_string_buffer(res_string, line, strlen(line));
+    if (result == -1) {
+        err("http_response_to_string", "Unable to write to the string buffer!");
+        printf("\tline: %s\n", line);
+        free(line);
+        return -1;
+    }
     // printf("2-1. [%s]\n", res_string->data);
 
+    // write headers
     for (ListItem* field = res_header->header_fields->items; field != NULL; field = field->next) {
-        written_bytes += snprintf(line, 1024, "%s: %s\r\n", field->key, (char*) field->value);
+        written_bytes += snprintf(line, max_line_size, "%s: %s\r\n", field->key, (char*) field->value);
         // printf("3. [%s]\n", line);
-        write_to_string_buffer(res_string, line, strlen(line));
+        result = write_to_string_buffer(res_string, line, strlen(line));
+        if (result == -1) {
+            err("http_response_to_string", "Unable to write to the string buffer!");
+            printf("\tline: %s\n", line);
+            free(line);
+            return -1;
+        }
         // printf("3-1. [%s]\n", res_string->data);
     }
 
     written_bytes += sprintf(line, "\r\n");
     // printf("4. [%s]\n", line);
-    write_to_string_buffer(res_string, line, strlen(line));
+    result = write_to_string_buffer(res_string, line, strlen(line));
+    if (result == -1) {
+        err("http_response_to_string", "Unable to write to the string buffer!");
+        printf("\tline: %s\n", line);
+        free(line);
+        return -1;
+    }
     // printf("4-1. [%s]\n", res_string->data);
     // print_buffer(res_string->data, res_string->max_size, 8);
 
@@ -394,39 +524,34 @@ ssize_t http_response_to_string(HTTPResponse* res, StringBuffer* res_string) {
     size_t body_size = strtoull((char*) content_length->value, NULL, 10);
     // printf("--- %zu\n", body_size);
 
-    write_to_string_buffer(res_string, res->body, body_size);
+    // write body
+    result = write_to_string_buffer(res_string, res->body, body_size);
+    if (result == -1) {
+        err("http_response_to_string", "Unable to write to the string buffer!");
+        printf("\tline: %s\n", line);
+        free(line);
+        return -1;
+    }
     // printf("\n\r\n4.[%s]\n", res_string->data);
 
     free(line);
     return res_string->size;
 }
 
-// int prepare_http_response(int client_fd, HTTPResponse* res) {
-//     StringBuffer response_string;
-//     init_string_buffer(&response_string, 256);
-//
-//     if (http_response_to_string(res, &response_string) == -1) {
-//         err("home_route_handler", "Unable to convert response to string!");
-//         return -1;
-//     }
-//
-//     int status = send(*client_fd, response_string.data, response_string.size, 0);
-//     if (status == -1) {
-//         err("home_route_handler", "Unable to respond to request!");
-//         printf("\t%d,\n%s\n", status, response_string.data);
-//     }
-//
-//     free_string_buffer(&response_string);
-// }
-
-int generate_http_date(const time_t* timer, char* date_string) {
+/*
+ * Function: generate_http_date
+ *
+ * ----------------------------
+ *
+ *  Generates date string.
+ *
+ *  timer: pointer to the current time.
+ *  date_string: pointer to the date string.
+ *
+ *  returns: date string length.
+ */
+size_t generate_http_date(const time_t* timer, char* date_string) {
     struct tm* gmt = gmtime(timer);
-
-    // char* date_string = malloc(DATE_BUFFER_SIZE * sizeof(char));
-    // if (date_string == NULL) {
-    //     err("generate_http_date", "Unable to allocate memory for date string!");
-    //     return NULL;
-    // }
 
     size_t result = strftime(date_string, DATE_BUFFER_SIZE * sizeof(char), 
                           "Date: %a, %d %b %Y %H:%M:%S GMT", gmt);
